@@ -1,0 +1,13 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.DS_Store
+# Jangan pernah commit keystore atau rahasia:
+*.jks
+*.keystore
+*.p12
+*.b64
+keystore*.txt
