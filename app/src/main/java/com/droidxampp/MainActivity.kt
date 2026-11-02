@@ -490,7 +490,8 @@ private fun ServiceCard(
     }
 }
 
-\n@Composable
+
+@Composable
 private fun LogPanel(logs: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(
