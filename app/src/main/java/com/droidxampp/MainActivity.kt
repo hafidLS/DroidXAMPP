@@ -47,21 +47,8 @@ private fun DroidXamppApp() {
         mutableStateOf("Siap. Hubungkan aplikasi dengan Termux.")
     }
 
-    var result by remember {
-        mutableStateOf(TermuxResultStore.latest.value)
-    }
-
     var monitorText by remember {
         mutableStateOf(TermuxResultStore.monitor.value)
-    }
-
-    var apacheExpected by remember { mutableStateOf<Boolean?>(null) }
-    var mariaExpected by remember { mutableStateOf<Boolean?>(null) }
-
-    LaunchedEffect(Unit) {
-        TermuxResultStore.latest.collectLatest {
-            result = it
-        }
     }
 
     LaunchedEffect(Unit) {
@@ -82,28 +69,6 @@ private fun DroidXamppApp() {
 
     val apacheRunning = apacheStatus == "RUNNING"
     val mariaRunning = mariaStatus == "RUNNING"
-
-    val apacheBusy = apacheExpected != null &&
-        apacheExpected != apacheRunning
-
-    val mariaBusy = mariaExpected != null &&
-        mariaExpected != mariaRunning
-
-    LaunchedEffect(monitorText) {
-        if (apacheStatus != null &&
-            apacheExpected != null &&
-            apacheExpected == apacheRunning
-        ) {
-            apacheExpected = null
-        }
-
-        if (mariaStatus != null &&
-            mariaExpected != null &&
-            mariaExpected == mariaRunning
-        ) {
-            mariaExpected = null
-        }
-    }
 
     // Pemantauan otomatis saat Dashboard dibuka.
     LaunchedEffect(page) {
@@ -187,9 +152,7 @@ private fun DroidXamppApp() {
                             subtitle = "HTTP Server • Port 8080",
                             statusText = apacheStatus ?: "Belum diperiksa",
                             isRunning = apacheRunning,
-                            isBusy = apacheBusy,
                             start = {
-                                apacheExpected = true
                                 runService(
                                     context,
                                     Service.APACHE,
@@ -199,7 +162,6 @@ private fun DroidXamppApp() {
                                 )
                             },
                             stop = {
-                                apacheExpected = false
                                 runService(
                                     context,
                                     Service.APACHE,
@@ -220,9 +182,7 @@ private fun DroidXamppApp() {
                             subtitle = "Database Server • Port 3306",
                             statusText = mariaStatus ?: "Belum diperiksa",
                             isRunning = mariaRunning,
-                            isBusy = mariaBusy,
                             start = {
-                                mariaExpected = true
                                 runService(
                                     context,
                                     Service.MARIADB,
@@ -232,7 +192,6 @@ private fun DroidXamppApp() {
                                 )
                             },
                             stop = {
-                                mariaExpected = false
                                 runService(
                                     context,
                                     Service.MARIADB,
@@ -295,10 +254,6 @@ private fun DroidXamppApp() {
                             extractLogs(monitorText)
                         )
 
-                        InfoCard(
-                            "Hasil perintah terakhir",
-                            result
-                        )
                     }
 
                     Page.DATABASE -> {
@@ -461,7 +416,6 @@ private fun ServiceCard(
     subtitle: String,
     statusText: String,
     isRunning: Boolean,
-    isBusy: Boolean,
     start: () -> Unit,
     stop: () -> Unit,
     status: () -> Unit
@@ -494,8 +448,7 @@ private fun ServiceCard(
                 }
 
                 Text(
-                    if (isBusy) "PROCESSING"
-                    else statusText,
+                    statusText,
                     color = if (isRunning) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -506,21 +459,14 @@ private fun ServiceCard(
                 )
             }
 
-            if (isBusy) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = if (isRunning) 1f else 0f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            LinearProgressIndicator(
+                progress = if (isRunning) 1f else 0f,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = start,
-                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Start")
@@ -528,7 +474,6 @@ private fun ServiceCard(
 
                 OutlinedButton(
                     onClick = stop,
-                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Stop")
@@ -536,7 +481,6 @@ private fun ServiceCard(
 
                 OutlinedButton(
                     onClick = status,
-                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Refresh")
@@ -546,7 +490,7 @@ private fun ServiceCard(
     }
 }
 
-@Composable
+\n@Composable
 private fun LogPanel(logs: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(
