@@ -2,9 +2,17 @@ package com.droidxampp.termux
 
 enum class Service(val script: String, val title: String) {
     APACHE("apache.sh", "Apache"),
-    MARIADB("mariadb.sh", "MariaDB")
+    MARIADB("mariadb.sh", "MariaDB"),
+    MONITOR("monitor.sh", "Monitor")
 }
-enum class Action(val arg: String) { START("start"), STOP("stop"), RESTART("restart"), STATUS("status"), VERSION("version") }
+
+enum class Action(val arg: String) {
+    START("start"),
+    STOP("stop"),
+    RESTART("restart"),
+    STATUS("status"),
+    VERSION("version")
+}
 
 object TermuxCommand {
     const val TERMUX_PKG = "com.termux"

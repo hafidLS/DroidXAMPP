@@ -15,10 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.droidxampp.termux.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,13 +46,75 @@ private fun DroidXamppApp() {
     var message by remember {
         mutableStateOf("Siap. Hubungkan aplikasi dengan Termux.")
     }
+
     var result by remember {
         mutableStateOf(TermuxResultStore.latest.value)
     }
 
+    var monitorText by remember {
+        mutableStateOf(TermuxResultStore.monitor.value)
+    }
+
+    var apacheExpected by remember { mutableStateOf<Boolean?>(null) }
+    var mariaExpected by remember { mutableStateOf<Boolean?>(null) }
+
     LaunchedEffect(Unit) {
         TermuxResultStore.latest.collectLatest {
             result = it
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        TermuxResultStore.monitor.collectLatest {
+            monitorText = it
+        }
+    }
+
+    val apacheStatus = monitorText
+        .lineSequence()
+        .firstOrNull { it.startsWith("APACHE_STATUS=") }
+        ?.substringAfter("=")
+
+    val mariaStatus = monitorText
+        .lineSequence()
+        .firstOrNull { it.startsWith("MARIADB_STATUS=") }
+        ?.substringAfter("=")
+
+    val apacheRunning = apacheStatus == "RUNNING"
+    val mariaRunning = mariaStatus == "RUNNING"
+
+    val apacheBusy = apacheExpected != null &&
+        apacheExpected != apacheRunning
+
+    val mariaBusy = mariaExpected != null &&
+        mariaExpected != mariaRunning
+
+    LaunchedEffect(monitorText) {
+        if (apacheStatus != null &&
+            apacheExpected != null &&
+            apacheExpected == apacheRunning
+        ) {
+            apacheExpected = null
+        }
+
+        if (mariaStatus != null &&
+            mariaExpected != null &&
+            mariaExpected == mariaRunning
+        ) {
+            mariaExpected = null
+        }
+    }
+
+    // Pemantauan otomatis saat Dashboard dibuka.
+    LaunchedEffect(page) {
+        if (page == Page.DASHBOARD) {
+            while (isActive) {
+                requestMonitor(
+                    context,
+                    onError = { message = it }
+                )
+                delay(5000)
+            }
         }
     }
 
@@ -115,68 +180,87 @@ private fun DroidXamppApp() {
                             fontWeight = FontWeight.Bold
                         )
 
+                        Text("Kelola layanan lokal yang berjalan melalui Termux.")
+
+                        ServiceCard(
+                            title = "Apache",
+                            subtitle = "HTTP Server • Port 8080",
+                            statusText = apacheStatus ?: "Belum diperiksa",
+                            isRunning = apacheRunning,
+                            isBusy = apacheBusy,
+                            start = {
+                                apacheExpected = true
+                                runService(
+                                    context,
+                                    Service.APACHE,
+                                    Action.START,
+                                    { message = it },
+                                    { message = it }
+                                )
+                            },
+                            stop = {
+                                apacheExpected = false
+                                runService(
+                                    context,
+                                    Service.APACHE,
+                                    Action.STOP,
+                                    { message = it },
+                                    { message = it }
+                                )
+                            },
+                            status = {
+                                requestMonitor(context) {
+                                    message = it
+                                }
+                            }
+                        )
+
+                        ServiceCard(
+                            title = "MariaDB",
+                            subtitle = "Database Server • Port 3306",
+                            statusText = mariaStatus ?: "Belum diperiksa",
+                            isRunning = mariaRunning,
+                            isBusy = mariaBusy,
+                            start = {
+                                mariaExpected = true
+                                runService(
+                                    context,
+                                    Service.MARIADB,
+                                    Action.START,
+                                    { message = it },
+                                    { message = it }
+                                )
+                            },
+                            stop = {
+                                mariaExpected = false
+                                runService(
+                                    context,
+                                    Service.MARIADB,
+                                    Action.STOP,
+                                    { message = it },
+                                    { message = it }
+                                )
+                            },
+                            status = {
+                                requestMonitor(context) {
+                                    message = it
+                                }
+                            }
+                        )
+
                         Text(
-                            "Kelola layanan lokal yang berjalan melalui Termux."
-                        )
-
-                        ServiceCard(
-                            "Apache",
-                            "HTTP Server • Port 8080",
-                            {
-                                runService(
-                                    context, Service.APACHE, Action.START,
-                                    { message = it }, { message = it }
-                                )
-                            },
-                            {
-                                runService(
-                                    context, Service.APACHE, Action.STOP,
-                                    { message = it }, { message = it }
-                                )
-                            },
-                            {
-                                runService(
-                                    context, Service.APACHE, Action.STATUS,
-                                    { message = it }, { message = it }
-                                )
-                            }
-                        )
-
-                        ServiceCard(
-                            "MariaDB",
-                            "Database Server • Port 3306",
-                            {
-                                runService(
-                                    context, Service.MARIADB, Action.START,
-                                    { message = it }, { message = it }
-                                )
-                            },
-                            {
-                                runService(
-                                    context, Service.MARIADB, Action.STOP,
-                                    { message = it }, { message = it }
-                                )
-                            },
-                            {
-                                runService(
-                                    context, Service.MARIADB, Action.STATUS,
-                                    { message = it }, { message = it }
-                                )
-                            }
+                            "Akses Layanan",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
 
                         Button(
                             onClick = {
-                                try {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("http://127.0.0.1:8080")
-                                        )
-                                    )
-                                } catch (e: Exception) {
-                                    message = "Browser tidak dapat dibuka."
-                                }
+                                openLocalPage(
+                                    context,
+                                    "http://127.0.0.1:8080",
+                                    { message = it }
+                                )
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -185,12 +269,34 @@ private fun DroidXamppApp() {
                             Text("Buka Localhost Apache")
                         }
 
-                        InfoCard("PHP", "PHP berjalan melalui integrasi Apache di Termux.")
+                        OutlinedButton(
+                            onClick = {
+                                openLocalPage(
+                                    context,
+                                    "http://127.0.0.1:8080/phpmyadmin/",
+                                    { message = it }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Storage, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Buka Database (phpMyAdmin)")
+                        }
+
+                        InfoCard(
+                            "PHP",
+                            "PHP berjalan melalui integrasi Apache di Termux."
+                        )
 
                         InfoCard("Aktivitas terakhir", message)
 
+                        LogPanel(
+                            extractLogs(monitorText)
+                        )
+
                         InfoCard(
-                            "Log aktivitas",
+                            "Hasil perintah terakhir",
                             result
                         )
                     }
@@ -214,7 +320,7 @@ private fun DroidXamppApp() {
 
                         InfoCard(
                             "Status pengembangan",
-                            "Integrasi phpMyAdmin belum dibuat."
+                            "Integrasi Database Manager belum dibuat."
                         )
                     }
 
@@ -263,12 +369,16 @@ private fun DroidXamppApp() {
                         Button(
                             onClick = {
                                 try {
-                                    context.startActivity(
-                                        context.packageManager
-                                            .getLaunchIntentForPackage("com.termux")
-                                    )
+                                    val launch = context.packageManager
+                                        .getLaunchIntentForPackage("com.termux")
+
+                                    if (launch != null) {
+                                        context.startActivity(launch)
+                                    } else {
+                                        message = "Termux tidak ditemukan."
+                                    }
                                 } catch (e: Exception) {
-                                    message = "Termux tidak ditemukan."
+                                    message = "Termux tidak dapat dibuka."
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -280,6 +390,19 @@ private fun DroidXamppApp() {
             }
         }
     }
+}
+
+private fun requestMonitor(
+    context: android.content.Context,
+    onError: (String) -> Unit
+) {
+    TermuxCommandRunner.run(
+        context,
+        Service.MONITOR,
+        Action.STATUS,
+        {},
+        { onError("Monitor gagal: $it") }
+    )
 }
 
 private fun runService(
@@ -302,10 +425,43 @@ private fun runService(
     )
 }
 
+private fun openLocalPage(
+    context: android.content.Context,
+    url: String,
+    onError: (String) -> Unit
+) {
+    try {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        )
+    } catch (e: Exception) {
+        onError("Halaman tidak dapat dibuka: ${e.message}")
+    }
+}
+
+private fun extractLogs(raw: String): String {
+    val start = raw.indexOf("LOG_BEGIN")
+    val end = raw.indexOf("LOG_END")
+
+    if (start == -1 || end == -1 || end <= start) {
+        return "Menunggu data log dari Termux..."
+    }
+
+    return raw.substring(
+        start + "LOG_BEGIN".length,
+        end
+    ).trim().ifBlank {
+        "Belum ada aktivitas."
+    }
+}
+
 @Composable
 private fun ServiceCard(
     title: String,
     subtitle: String,
+    statusText: String,
+    isRunning: Boolean,
+    isBusy: Boolean,
     start: () -> Unit,
     stop: () -> Unit,
     status: () -> Unit
@@ -325,7 +481,7 @@ private fun ServiceCard(
 
                 Spacer(Modifier.width(12.dp))
 
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         title,
                         style = MaterialTheme.typography.titleLarge,
@@ -336,11 +492,35 @@ private fun ServiceCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+
+                Text(
+                    if (isBusy) "PROCESSING"
+                    else statusText,
+                    color = if (isRunning) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (isBusy) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = if (isRunning) 1f else 0f,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = start,
+                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Start")
@@ -348,6 +528,7 @@ private fun ServiceCard(
 
                 OutlinedButton(
                     onClick = stop,
+                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Stop")
@@ -355,10 +536,50 @@ private fun ServiceCard(
 
                 OutlinedButton(
                     onClick = status,
+                    enabled = !isBusy,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Status")
+                    Text("Refresh")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogPanel(logs: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Terminal, null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Log Aktivitas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Text(
+                "Riwayat aktivitas Apache dan MariaDB",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    logs,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

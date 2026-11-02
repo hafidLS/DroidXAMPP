@@ -35,7 +35,12 @@ class PluginResultsService : IntentService("DroidXAMPP-TermuxResults") {
             appendLine("Exit code: $exitCode")
         }
 
-        TermuxResultStore.add(output)
+        if (stdout.startsWith("APACHE_STATUS=")) {
+            TermuxResultStore.addMonitor(stdout)
+        } else {
+            TermuxResultStore.add(output)
+        }
+
         Log.d("DroidXAMPP", "Termux command finished: $exitCode")
     }
 
